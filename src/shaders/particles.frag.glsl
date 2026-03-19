@@ -11,11 +11,11 @@ void main() {
 
   if (alpha < 0.01) discard;
 
-  // Base color: vivid cyan
-  vec3 baseCyan = vec3(0.0, 0.9, 1.0);
+  // Base color: white
+  vec3 baseCyan = vec3(1.0, 1.0, 1.0);
 
-  // Ripple peak: bright white
-  vec3 rippleWhite = vec3(1.0, 1.0, 1.0);
+  // Ripple peak (kick): bright cyan
+  vec3 rippleWhite = vec3(0.0, 1.0, 1.0);
   float rippleMix = abs(vRippleHeight);
 
   // Flare: neon pink (#FF007F)
@@ -23,14 +23,14 @@ void main() {
 
   // Blend
   vec3 color = baseCyan;
-  color = mix(color, rippleWhite, rippleMix * 0.8);
-  color = mix(color, flarePink, vFlareIntensity);
+  color = mix(color, rippleWhite, rippleMix);
+  color = mix(color, flarePink, clamp(vFlareIntensity * 2.0, 0.0, 1.0));
 
-  // Emissive boost
-  float emissiveBoost = 1.5 + rippleMix * 3.0 + vFlareIntensity * 4.0;
+  // Emissive boost — high floor so dim particles survive luma key
+  float emissiveBoost = 4.5 + rippleMix * 5.0 + vFlareIntensity * 10.0;
   color *= emissiveBoost;
 
-  float finalAlpha = alpha * (0.6 + rippleMix * 0.4 + vFlareIntensity * 0.4);
+  float finalAlpha = alpha * (0.85 + rippleMix * 0.15 + vFlareIntensity * 0.15);
   finalAlpha = clamp(finalAlpha, 0.0, 1.0);
 
   gl_FragColor = vec4(color, finalAlpha);

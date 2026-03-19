@@ -11,8 +11,8 @@ export const audioValues = {
 
 export const KICK_LO_HZ = 30
 export const KICK_HI_HZ = 90
-export const SNARE_LO_HZ = 1000
-export const SNARE_HI_HZ = 2000
+export const SNARE_LO_HZ = 150
+export const SNARE_HI_HZ = 300
 
 const ATTACK = 0.8
 const RELEASE = 0.05
@@ -42,12 +42,47 @@ function setupAnalyser() {
   }
 }
 
-/** Microphone input mode */
-export async function initAudio() {
+const audioConstraints = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+}
+
+/**
+ * Find an audio input device whose label contains `name`.
+ * Must be called after getUserMedia (labels are blank until permission is granted).
+ */
+async function findAudioDevice(name: string): Promise<string | undefined> {
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  const audioInputs = devices.filter((d) => d.kind === 'audioinput')
+  console.log('[audio] available inputs:', audioInputs.map((d) => d.label))
+  const match = audioInputs.find((d) => d.label.includes(name))
+  if (match) console.log('[audio] matched device:', match.label)
+  else console.log('[audio] no match for:', name, '— using default')
+  return match?.deviceId
+}
+
+/** Audio-input mode — optionally target a device by name (e.g. "BlackHole") */
+export async function initAudio(preferredDevice?: string) {
   audioCtx = new AudioContext()
   await audioCtx.resume()
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  // First request grants permission and populates device labels
+  let stream = await navigator.mediaDevices.getUserMedia({
+    audio: audioConstraints,
+  })
+
+  // If a preferred device was requested, find it and re-open
+  if (preferredDevice) {
+    const deviceId = await findAudioDevice(preferredDevice)
+    if (deviceId) {
+      stream.getTracks().forEach((t) => t.stop())
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { ...audioConstraints, deviceId: { exact: deviceId } },
+      })
+    }
+  }
+
   const source = audioCtx.createMediaStreamSource(stream)
 
   setupAnalyser()
@@ -94,9 +129,15 @@ function tick() {
   const normKick = Math.min(kickSum / maxKick, 1.0)
   const normSnare = Math.min(snareSum / maxSnare, 1.0)
 
+  // Gate — ignore signals below threshold
+  const KICK_THRESHOLD = 0.3
+  const SNARE_THRESHOLD = 0.5
+  const gatedKick = normKick > KICK_THRESHOLD ? (normKick - KICK_THRESHOLD) / (1.0 - KICK_THRESHOLD) : 0
+  const gatedSnare = normSnare > SNARE_THRESHOLD ? (normSnare - SNARE_THRESHOLD) / (1.0 - SNARE_THRESHOLD) : 0
+
   // Envelope follower
-  smoothKick += (normKick > smoothKick ? ATTACK : RELEASE) * (normKick - smoothKick)
-  smoothSnare += (normSnare > smoothSnare ? ATTACK : RELEASE) * (normSnare - smoothSnare)
+  smoothKick += (gatedKick > smoothKick ? ATTACK : RELEASE) * (gatedKick - smoothKick)
+  smoothSnare += (gatedSnare > smoothSnare ? ATTACK : RELEASE) * (gatedSnare - smoothSnare)
 
   audioValues.kickIntensity = smoothKick
   audioValues.snareIntensity = smoothSnare

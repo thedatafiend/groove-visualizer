@@ -13,7 +13,7 @@ export default function Scene() {
         powerPreference: 'high-performance',
       }}
       camera={{ position: [0, 6, 12], fov: 50, near: 0.1, far: 100 }}
-      style={{ background: overlay ? 'transparent' : '#000000' }}
+      style={{ background: '#000000' }}
       onCreated={({ gl }) => {
         gl.setClearColor(0x000000, overlay ? 0 : 1)
       }}

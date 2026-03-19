@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import Scene from './components/Scene'
 import DebugOverlay from './components/DebugOverlay'
 import { initAudio, initAudioFromElement } from './audio/AudioAnalyser'
-import { isOverlayMode } from './overlay'
+import { isOverlayMode, getOverlayDevice } from './overlay'
 
 export default function App() {
   const overlay = isOverlayMode()
-  const [started, setStarted] = useState(overlay)
+  const [started, setStarted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [debug, setDebug] = useState(false)
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
@@ -22,11 +22,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // In overlay mode, try to auto-init mic audio (silently fail if no permission)
-  useEffect(() => {
-    if (!overlay) return
-    initAudio().catch(() => {})
-  }, [overlay])
+  const handleOverlayStart = useCallback(async () => {
+    try {
+      const device = getOverlayDevice() ?? 'BlackHole'
+      await initAudio(device)
+      console.log('[overlay] audio initialized, preferred device:', device)
+      setStarted(true)
+    } catch (e) {
+      console.error('[overlay] audio init failed:', e)
+      setError(e instanceof Error ? e.message : 'Failed to init audio')
+    }
+  }, [])
 
   const handleStart = useCallback(async () => {
     try {
@@ -102,7 +108,7 @@ export default function App() {
           gap: '1rem',
         }}>
           <button
-            onClick={handleStart}
+            onClick={overlay ? handleOverlayStart : handleStart}
             style={{
               fontSize: '1.4rem',
               padding: '1rem 2.5rem',
@@ -114,7 +120,7 @@ export default function App() {
               fontFamily: 'monospace',
             }}
           >
-            Start Visualizer
+            {overlay ? 'Start Overlay' : 'Start Visualizer'}
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
