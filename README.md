@@ -9,6 +9,91 @@ Real-time audio-reactive particle visualizer for drums. 10,000 particles arrange
 - **OBS overlay mode** — open with `?overlay` for a transparent background, ready to layer over your camera in OBS
 - **Debug overlay** — press `D` to see the FFT spectrum, frequency bands, and intensity meters
 
+## Signal Flow
+
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│   Microphone Input   │     │   Video/Audio Element │
+│  (getUserMedia)      │     │ (createMediaElement   │
+│                      │     │       Source)          │
+└─────────┬───────────┘     └──────────┬────────────┘
+          │                            │
+          │  MediaStreamSource         │  MediaElementSource
+          └───────────┬────────────────┘
+                      ▼
+          ┌───────────────────────┐
+          │     AnalyserNode      │
+          │  FFT size: 2048       │
+          │  1024 frequency bins  │
+          │  smoothing: 0.4       │
+          └───────────┬───────────┘
+                      │
+                      │  getFloatFrequencyData (dB values)
+                      ▼
+          ┌───────────────────────┐
+          │  Frequency Band Split │
+          │                       │
+          │  Kick:  30 – 90 Hz    │
+          │  Snare: 150 – 300 Hz  │
+          │                       │
+          │  dB → linear per bin  │
+          │  averaged across band │
+          └───────────┬───────────┘
+                      │
+                      ▼
+          ┌───────────────────────┐
+          │  Auto-Gain + Gating   │
+          │                       │
+          │  Peak tracking w/     │
+          │  0.999 decay          │
+          │  Normalize to 0–1     │
+          │  Gate: kick > 0.3     │
+          │        snare > 0.5    │
+          └───────────┬───────────┘
+                      │
+                      ▼
+          ┌───────────────────────┐
+          │   Envelope Follower   │
+          │                       │
+          │  Attack:  0.8         │
+          │  Release: 0.05        │
+          │                       │
+          │  → kickIntensity      │
+          │  → snareIntensity     │
+          └───────┬───────┬───────┘
+                  │       │
+        ┌─────────┘       └──────────┐
+        ▼                            ▼
+┌───────────────────┐    ┌────────────────────┐
+│  Particle Shader  │    │   Debug Overlay    │
+│  (DrumParticles)  │    │  (DebugOverlay)    │
+│                   │    │                    │
+│  kick → ripple    │    │  FFT spectrum bars │
+│  waves (Y disp.)  │    │  Band highlights   │
+│                   │    │  Intensity meters  │
+│  snare → radial   │    │                    │
+│  flare burst      │    │  Press D to toggle │
+│                   │    │                    │
+│  10,000 instanced │    └────────────────────┘
+│  billboard quads  │
+│                   │
+│  Colors:          │
+│   ripple → cyan   │
+│   flare  → pink   │
+└───────────────────┘
+```
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `src/audio/AudioAnalyser.ts` | FFT analysis, frequency band extraction, envelope follower |
+| `src/App.tsx` | Audio initialization (mic or video source) |
+| `src/components/DrumParticles.tsx` | Particle geometry, passes audio uniforms to shaders |
+| `src/shaders/particles.vert.glsl` | Vertex displacement driven by kick/snare intensity |
+| `src/shaders/particles.frag.glsl` | Color mixing (cyan ripples, pink flares) |
+| `src/components/DebugOverlay.tsx` | 2D canvas FFT spectrum and intensity meters |
+
 ## Getting Started
 
 ```bash
