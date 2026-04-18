@@ -1,7 +1,12 @@
 let audioCtx: AudioContext
 let analyser: AnalyserNode
 let freqData: Float32Array
+let displayAnalyser: AnalyserNode
+let displayFreqData: Float32Array
+let displayTimeData: Float32Array
 let ticking = false
+
+const DISPLAY_FFT_SIZE = 8192
 
 /** Mutable values read by the render loop — no React re-renders */
 export const audioValues = {
@@ -31,11 +36,38 @@ export function getDebugData() {
   }
 }
 
+/** Stable snapshot from the display analyser (larger fftSize, covers a longer time window). */
+export function snapshotFFT() {
+  return {
+    freq: new Float32Array(displayFreqData),
+    time: new Float32Array(displayTimeData),
+    minDb: displayAnalyser.minDecibels,
+    maxDb: displayAnalyser.maxDecibels,
+    sampleRate: audioCtx.sampleRate,
+    fftSize: displayAnalyser.fftSize,
+  }
+}
+
+/** Static info about the display analyser — used for layout (time-window labels). */
+export function getDisplayInfo() {
+  return {
+    sampleRate: audioCtx?.sampleRate ?? 48000,
+    fftSize: displayAnalyser?.fftSize ?? DISPLAY_FFT_SIZE,
+  }
+}
+
 function setupAnalyser() {
   analyser = audioCtx.createAnalyser()
   analyser.fftSize = 2048
   analyser.smoothingTimeConstant = 0.4
   freqData = new Float32Array(analyser.frequencyBinCount)
+
+  displayAnalyser = audioCtx.createAnalyser()
+  displayAnalyser.fftSize = DISPLAY_FFT_SIZE
+  displayAnalyser.smoothingTimeConstant = 0.3
+  displayFreqData = new Float32Array(displayAnalyser.frequencyBinCount)
+  displayTimeData = new Float32Array(displayAnalyser.fftSize)
+
   if (!ticking) {
     ticking = true
     tick()
@@ -87,6 +119,7 @@ export async function initAudio(preferredDevice?: string) {
 
   setupAnalyser()
   source.connect(analyser)
+  source.connect(displayAnalyser)
 }
 
 /** Video/audio element input mode — audio plays through speakers */
@@ -98,12 +131,15 @@ export async function initAudioFromElement(mediaElement: HTMLMediaElement) {
 
   setupAnalyser()
   source.connect(analyser)
+  source.connect(displayAnalyser)
   analyser.connect(audioCtx.destination)
 }
 
 function tick() {
   requestAnimationFrame(tick)
   analyser.getFloatFrequencyData(freqData)
+  displayAnalyser.getFloatFrequencyData(displayFreqData)
+  displayAnalyser.getFloatTimeDomainData(displayTimeData)
 
   const binHz = audioCtx.sampleRate / analyser.fftSize
 
